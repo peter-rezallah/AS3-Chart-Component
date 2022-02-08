@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx" width="300" height="200"   creationComplete="handleCreationComplete()" initialize="init()">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Metadata>
+		[Event(name="updateStudySettings",type="sigma.studies.events.UpdateStudySettings")]
+	</fx:Metadata>
+	<fx:Script>
+		<![CDATA[
+			import mx.events.CloseEvent;
+			import mx.managers.PopUpManager;
+			
+			import sigma.studies.events.UpdateStudySettings;
+			
+			import spark.components.HGroup;
+			import spark.components.Label;
+			import spark.components.TextInput;
+			
+			private var _paramerts:Array = new Array();
+			private var _study:Object ;
+			
+			
+			private function handleCreationComplete():void
+			{
+				for each(var _parametrItem:Object in _paramerts )
+				{
+					var _hgroup:HGroup = new HGroup ;
+					var _itemLabel:Label = new Label();
+					_itemLabel.text = _parametrItem.label ;
+					_itemLabel.width = 70 ;
+					var _textVal:TextInput = new TextInput ;
+					_textVal.text = _parametrItem.value ;
+					_hgroup.addElement(_itemLabel);
+					_hgroup.addElement(_textVal);
+					container.addElement(_hgroup);
+				}
+			}			
+			
+			private function init():void
+			{
+				addEventListener( KeyboardEvent.KEY_DOWN, handleKeyDown );
+				addEventListener( CloseEvent.CLOSE, handleClose );
+			}
+			
+			private function draw():void
+			{
+				sendSettingsData(); 
+				handleClose();
+			}
+			
+			private function sendSettingsData():void
+			{
+				var eventObj:UpdateStudySettings = new UpdateStudySettings(UpdateStudySettings.UPDATE_STUDY_SETTINGS);
+				eventObj.parametrs = this.studyParamerts;
+				_study.studyParametrs = studyParamerts ;
+				eventObj.study = _study ;
+				dispatchEvent(eventObj);	
+			}
+			
+			private function handleClose( event:CloseEvent = null ):void
+			{
+				PopUpManager.removePopUp( this );
+			}
+			
+			private function handleKeyDown( event:KeyboardEvent ):void
+			{
+				if (event.keyCode == Keyboard.ESCAPE)
+				{
+					PopUpManager.removePopUp( this );
+				}
+			}
+			
+			public function set study(val:Object):void
+			{
+				_study = val ;
+			}
+				
+			
+			public function set studyParamerts(val:Array):void
+			{
+				_paramerts = val ;
+			}
+			
+			public function get studyParamerts():Array
+			{
+				var _index:int = 0 ;
+				
+				for each( var item:Object in _paramerts )
+				{
+					var _hgroub:HGroup = HGroup(container.getChildAt(_index)) ;
+					item.value =  TextInput(_hgroub.getChildAt(1)).text ;
+					_index++;
+				}
+				
+				return _paramerts ;
+			}
+			
+		]]>
+	</fx:Script>
+	<s:VGroup >	
+		<s:VGroup id="container" >		
+		</s:VGroup>
+		<s:HGroup>
+			<s:Button buttonDown="PopUpManager.removePopUp(this)" label="close" />
+			<s:Button label="Draw" click="draw()" />
+		</s:HGroup>
+	</s:VGroup>
+	
+	
+</s:TitleWindow>

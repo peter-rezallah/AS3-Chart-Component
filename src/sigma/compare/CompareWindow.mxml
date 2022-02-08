@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx" width="200" height="250" initialize="init()">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Metadata>
+		[Event(name="addToCompare",type="sigma.customeEvents.CompareEvent")]
+	</fx:Metadata>
+	<fx:Script>
+		<![CDATA[
+			import mx.events.CloseEvent;
+			import mx.managers.PopUpManager;
+			
+			import sigma.customeEvents.CompareEvent;
+			
+			import spark.components.Button;
+			
+			private function init():void
+			{
+				addEventListener( KeyboardEvent.KEY_DOWN, handleKeyDown );
+				addEventListener( CloseEvent.CLOSE, handleClose );
+			}
+			
+			private function handleClose( event:CloseEvent = null ):void
+			{
+				PopUpManager.removePopUp( this );
+			}
+			
+			private function handleKeyDown( event:KeyboardEvent ):void
+			{
+				if (event.keyCode == Keyboard.ESCAPE)
+				{
+					PopUpManager.removePopUp( this );
+				}
+			}
+			
+			private function handleReuterCodeChange(e:Event):void
+			{
+				if(e.target.selected)
+				{
+					reuterCodeText.enabled = true ;
+					focusManager.setFocus(reuterCodeText);
+				}
+				else reuterCodeText.enabled = false ;
+			}
+			
+			private function handleDrawLines():void
+			{
+				var evtObj:CompareEvent = new CompareEvent(CompareEvent.ADD_TO_COMPARE);
+				evtObj.CODE = reuterCodeText.text ;
+				evtObj.EGX20 = egx20Checked.selected ;
+				evtObj.EGX30 = egx30Checked.selected ;
+				evtObj.EGX70 = egx70Checked.selected ;
+				evtObj.EGX100 = egx100Checked.selected ;
+				dispatchEvent(evtObj);
+				
+			}
+			
+		]]>
+	</fx:Script>
+	<s:VGroup width="100%" height="100%">
+		<s:HGroup width="100%">
+			<s:CheckBox id="ruterCode" change="handleReuterCodeChange(event)" /><s:TextInput id="reuterCodeText" width="50" enabled="false" />
+		</s:HGroup>
+		<s:CheckBox label=" EGX20 Index" id="egx20Checked" />
+		<s:CheckBox label=" EGX30 Index" id="egx30Checked" />
+		<s:CheckBox label=" EGX70 Index" id="egx70Checked" />
+		<s:CheckBox label=" EGX100 Index" id="egx100Checked" />		
+		<s:HGroup width="100%">
+			<s:Button label="Draw" click="handleDrawLines()" />
+			<s:Button label="Cancel" click="handleClose()" />
+		</s:HGroup>
+			
+	</s:VGroup>
+</s:TitleWindow>

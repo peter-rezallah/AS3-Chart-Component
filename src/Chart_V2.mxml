@@ -1,0 +1,1346 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx" minWidth="955" minHeight="600" xmlns:flexmdi="sigma.flexmdi.containers.*" xmlns:Ccomponents="sigma.customComponents.controls.*" xmlns:local="*" resize="resize()" initialize="oninitialize()" creationComplete="handleCreationComplete()" >
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		@namespace mx "library://ns.adobe.com/flex/mx";
+		@namespace local "*";
+		mx|PopUpButton{font-size:11px;popUpStyleName: myCustomPopUpStyleName;}
+		.myCustomPopUpStyleName {fontWeight: normal;textAlign: left}
+		
+	</fx:Style>
+	<fx:Metadata>
+		[Event(name="trendLineAdded",type="sigma.customEvents.TrendLineAdded")]
+		[Event(name="studyRemoved",type="sigma.customEvents.StudyPaneDeleted")]
+		[Event(name="studyRemovedByKeyClick",type="sigma.customEvents.DeleteStudyByKey")]
+	</fx:Metadata>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+		<fx:XMLList id="linetypeDp">						
+			<Object label="area" data="area" />
+			<Object label="line" data="line" />
+			<Object label="candle" data="candle" />
+			<Object label="ohlc" data="ohlc" />
+			<Object label="hilo" data="hilo" />
+			<!-- <Object type="separator" />
+			<Object label="Configurtion" data="" >
+				<fx:Object label="Reset Configuration" data="" />
+				<fx:Object label="Export Image" />
+				<fx:Object label="Export Excell" />
+				<fx:Object label="View UnderLine Data" />
+				<fx:Object label="Print Chart" /> 
+			</Object>-->
+		</fx:XMLList>
+		
+		<fx:XMLList id="indicatorsTypeDp">						
+			<Object label="Upper Indicators" data="" >
+				<Object label="Bollinger Bands (BANDS)" data="BollingerBands" newPane="false"/>
+				<Object label="Exponential Moving Average (EMA)" data="ExponentialMovingAverage" newPane="false"/>
+				<Object label="Simple Moving Average (SMA)" data="SimpleMovingAverage" newPane="false" />
+				<Object label="Weighted Moving Average (WSMA)" data="WeightedMovingAverage" newPane="false" />
+			</Object>	
+			<Object label="Lower Indicators" data="" >	
+				<Object label="MACD" data="MACD" newPane="true" />
+				<Object label="MACDF" data="MACDF" newPane="true" />				
+				<Object label="Momentum" data="Momentum" newPane="true" />				
+				<Object label="Relative Strength Index (RSI)" data="RelativeStrengthIndex" newPane="true" />
+				<Object label="Volume" data="Volume" newPane="true" />
+				<Object label="Wiliiams %R" data="WilliamsPercentR" />
+				<Object label="Fast Stochastic Oscillator" data="FastSTO" newPane="true" />
+				<Object label="Slow Stochastic Oscillator" data="SlowSTO" newPane="true" />
+			</Object>	
+			<!--<Object type="separator" />
+			 <Object label="Draw Trendlines" data="" />
+			<Object label="Clear Trendlines" data="" /> -->				
+		</fx:XMLList>		
+		
+		<s:ArrayList id="arrDuration">
+			<fx:Object label="1D" data="1" />
+			<fx:Object label="1W" data="7" />
+			<fx:Object label="2W" data="14" />
+			<fx:Object label="3W" data="21" />
+			<fx:Object label="1M" data="30" />
+			<fx:Object label="3M" data="90" />
+			<fx:Object label="6M" data="180" />
+			<fx:Object label="9M" data="270" />
+			<fx:Object label="1Y" data="360" />
+			<fx:Object label="2Y" data="720" />
+			<fx:Object label="3Y" data="1080" />
+			<fx:Object label="YTD" data="ytd" />
+		</s:ArrayList>
+		<s:ArrayList id="arrZoom">
+			<!--<fx:Object label="L" data="left" />
+			<fx:Object label="R" data="right" />-->
+			<fx:Object label="+" data="+" />
+			<fx:Object label="-" data="-" />			
+		</s:ArrayList>
+		
+		
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import cog.data3.*;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Menu;
+			import mx.core.UIComponent;
+			import mx.events.DividerEvent;
+			import mx.events.MenuEvent;
+			import mx.events.ResizeEvent;
+			import mx.formatters.DateFormatter;
+			import mx.graphics.SolidColor;
+			import mx.graphics.SolidColorStroke;
+			import mx.graphics.Stroke;
+			import mx.managers.PopUpManager;
+			import mx.messaging.messages.ErrorMessage;
+			
+			import sigma.Organizer;
+			import sigma.chartBase.ChartBase;
+			import sigma.compare.CompareWindow;
+			import sigma.customeEvents.CompareEvent;
+			import sigma.customeEvents.DeleteStudyByKey;
+			import sigma.customeEvents.StudyPaneDeleted;
+			import sigma.customeEvents.TrendLineAdded;
+			import sigma.studies.BollingerBands;
+			import sigma.studies.CompareStudy;
+			import sigma.studies.ExponentialMovingAverage;
+			import sigma.studies.FastSTO;
+			import sigma.studies.Functions;
+			import sigma.studies.MACD;
+			import sigma.studies.MACDF;
+			import sigma.studies.Momentum;
+			import sigma.studies.RelativeStrengthIndex;
+			import sigma.studies.SimpleMovingAverage;
+			import sigma.studies.SlowSTO;
+			import sigma.studies.StudyConfigurationFloatWindow;
+			import sigma.studies.TrendLine;
+			import sigma.studies.Volume;
+			import sigma.studies.WeightedMovingAverage;
+			import sigma.studies.WilliamsPercentR;
+			import sigma.studies.events.UpdateStudySettings;
+			
+			import spark.events.IndexChangeEvent;
+			
+			
+			private var _connection:Connection ;
+			private var urlRequest:URLRequest ;
+			private var urlLoader:URLLoader;
+			private var valuesXml:ArrayCollection ;
+			private var valuesCog:ArrayCollection ;
+			private var xmlChart:XML;
+			private var value:Object;
+			private var TimeStamp1OldValue:String = "" ;
+			private var firstTimeRead:Boolean = true ;
+			private var _record:Record = new Record();
+			private var timer:Timer ;
+			
+			[Bindable]
+			private var settingsMenu:Menu ;
+			[Bindable]
+			private var techIndicatorsMenu:Menu ;	
+			
+			[Bindable]private var yMax_SC:Number = 0 ;
+			[Bindable]private var yMin_SC:Number = 0;
+			
+			private var yMax:Number = 0 ;
+			private var yMin:Number = 0;
+			
+			private var yMax_Comp:Number = 0 ;
+			private var yMin_Comp:Number = 0;
+			
+			private var yMaxMacd:Number = 0 ;
+			private var yMinMacd:Number = 0;
+			
+			private var yMaxMacdF:Number = 0 ;
+			private var yMinMacdF:Number = 0;
+			
+			private var yMaxMom:Number = 0 ;
+			private var yMinMom:Number = 0;
+			
+			private var selectedSummary:String = "T";
+			private var summaryArray:Array = ["T","1M","5M","10M","30M","1H","1D"];
+			
+			private var ySteps:Number = 0;
+			[Bindable]
+			private var CODE:String = "ORTE" ;			
+			private var selectedDuration:String = "1";
+			
+			
+			/* private var chartVolume:Pane ;
+			private var volumeStudy:Boolean = false ;
+			private var volume:Volume ; */
+			
+			
+			private var chartBase:ChartBase ;
+			
+			private var smaLine:SimpleMovingAverage;
+			private var smaLineAdded:Boolean = false ;
+			
+			
+			private var wmaLineAdded:Boolean = false ;
+			private var wmaLine:WeightedMovingAverage ;
+			
+			private var bbLine:BollingerBands ;
+			private var bbLineAdded:Boolean = false ;		
+			
+			private var emaLineAdded:Boolean = false ;
+			private var emaLine:ExponentialMovingAverage ;
+			
+			
+			
+			private var macd:MACD;		
+			private var chartMacd:Pane ;
+			private var macdChartAdded:Boolean = false ;			
+			
+			
+			private var macdF:MACDF;
+			private var chartMacdF:Pane ;
+			private var macdFChartAdded:Boolean = false ;
+			
+			
+			private var chartWPR:Pane ;
+			private var wprChartAdded:Boolean = false ;
+			private var williamsPercentR:WilliamsPercentR ;
+			
+			
+			private var chartFastOST:Pane ;
+			private var fastostChartAdded:Boolean = false ;			
+			private var fastSTO:FastSTO ;
+			
+			private var chartSlowOST:Pane ;
+			private var slowostChartAdded:Boolean = false ;			
+			private var slowSTO:SlowSTO ;
+			
+			
+			private var chartRSI:Pane ;
+			private var rsiChartAdded:Boolean = false ;
+			private var relativeStrengthIndex:RelativeStrengthIndex;
+			
+			
+			private var chartMom:Pane ;
+			private var momChartAdded:Boolean = false ;	
+			private var momentum:Momentum ;
+			
+			
+			
+			
+			private var DATA_LENGTH:Number = 500;
+			private var LEFT_START:Number = 0;
+			private var RIGHT_START:Number = 100;
+			[Bindable] public var chartData:ArrayCollection;
+			public var chartLabels:ArrayCollection ;
+
+			
+			
+			[Bindable] private var leftBoundary:Number;
+			[Bindable] private var rightBoundary:Number;
+			[Embed(source="img/divider.png")] [Bindable] public var dividerClass:Class;
+			[Embed(source="img/blank.png")] [Bindable] public var blankDividerClass:Class;			
+			[Bindable]private var areaColor:SolidColor = new SolidColor(0x343399, 0.5);			
+			[Bindable]private var areaStroke:SolidColorStroke = new SolidColorStroke(0x0033CC, 2);
+			private var staticLeftBoundary:Number;
+			private var staticRightBoundary:Number;			
+			public var smallDrag:Boolean = false;
+			public var bigDrag:Boolean = false;
+			public var mouseXRef:Number;
+			
+			private var _organizer:Organizer ;
+			private var _studyConWindow:StudyConfigurationFloatWindow ;
+			private var _compareWindowOptions:CompareWindow ;
+			public var isCompare:Boolean = false ;
+			public var noCompareLines:int = 0 ;
+			
+			
+			private function handleCreationComplete():void
+			{				
+				_organizer = new Organizer( chartUICon );
+				addEventListener(TrendLineAdded.TRENDLINE_ADDED, addTrendLine ) ;
+				addEventListener(StudyPaneDeleted.STUDY_PANE_REMOVED , handleRemoveStudy ) ;
+				addEventListener(DeleteStudyByKey.DELETE_STUDY , handleDeleteStudyBykeyClick ) ;
+				
+			}
+			
+			private function resize():void
+			{
+				if(chartMain)
+				{
+					chartMain.dispatchEvent(new ResizeEvent(ResizeEvent.RESIZE));
+				}				
+				
+			}
+			
+			public function dispatchMouseMoveEvent(x:Number , y:Number ):void
+			{
+				_organizer.syncorizeMouseMoveInAllStudies(x , y ) ;
+			}
+			
+			public function dispatchMouseMoveEventToMain(x:Number , y:Number ):void
+			{
+				chartMain.sendMouseXY(x , y );
+			}
+			
+			private function oninitialize():void
+			{
+				value = new Object();
+				value.main = new Object();
+				value.main['title'] = [];
+				/* value.main['title'].text = " MAIN Chart"; */
+				value.main['title'].style = "text-align: left";
+				value.main['y_axis'] = [];
+				value.main['y_axis']['stroke'] = 1;
+				value.main['y_axis']['grid-colour'] = "#dddddd";
+				value.main['y_axis']['colour'] = "#c6d9fd";
+				value.main['bg_colour'] = "#ffffff";
+				value.main['border_color'] = "#cccccc";
+				value.main['elements'] = [];
+				value.main['elements'][0] = [];
+				value.main['elements'][0]['colour'] = "#736AFF";
+				value.main['elements'][0]['text'] = CODE + "(" + selectedSummary + ")" ;
+				value.main['elements'][0]['font-size'] = 10 ;
+				value.main['elements'][0]['type']="line";
+				value.main['elements'][0]['fill']="#343399";
+				value.main['elements'][0]['fill-alpha']= 0.5;
+				//value.main['elements'][0]['on-show"'] = {"type": "shrink-in", "cascade":30, "delay":20.0} ;
+				//value.main['elements'][0]['dot-style'] = {"type":"solid-dot", "colour":"#a44a80", "dot-size": 1,"tip":"#val#<br>#x_label#" };
+				//value['elements'][0]['negative-colour']= "#d04040";
+				value.main['elements'][0]['tip']= "#x_label#<br>O:#open#<br>H:#high#<br>L:#low#<br>C:#value#";
+				value.main['elements'][0].values = [];
+				
+				
+				value.main['x_axis'] = [];
+				value.main['x_axis']['steps'] = 30 ;
+				
+				value.main['x_axis']['offset'] = true ;
+				value.main['x_axis']['stroke'] = 1;
+				value.main['x_axis']['colour'] = "#c6d9fd";
+				value.main['x_axis']['grid-colour'] = '#dddddd';
+				value.main['x_axis'].labels = [];				
+				value.main['x_axis']['labels']['visible-steps'] = 50 ;
+				value.main['x_axis']['labels'].labels = [];
+				
+				value.main['tooltip'] = [];
+				value.main['tooltip'].mouse = 0 ;
+				value.main['tooltip'].stroke = 1 ;
+				value.main['tooltip'].color = "#00d000" ;
+				value.main['tooltip'].rounded = 12 ;
+				value.main['tooltip'].background = "#d0d0ff";
+				value.main['tooltip'].title = "{font-size: 14px; color: #905050;}" ;
+				value.main['tooltip'].body = "{font-size: 10px; font-weight: bold; color: #9090ff;}" ;	
+				
+				
+				timer = new Timer(100);
+				
+				valuesCog = new ArrayCollection();
+				//loadHestoricData();
+				
+				settingsMenu = new Menu();
+				settingsMenu.dataProvider = linetypeDp ;
+				settingsMenu.labelField = "@label";				
+				settingsMenu.addEventListener(MenuEvent.ITEM_CLICK , settingsItemClickHandler );
+				
+				techIndicatorsMenu = new Menu();
+				techIndicatorsMenu.dataProvider = indicatorsTypeDp ;
+				techIndicatorsMenu.labelField = "@label";
+				techIndicatorsMenu.addEventListener(MenuEvent.ITEM_CLICK , techIndicatorsItemClickHandler );
+				
+				
+				_connection = new Connection("streamer.sigma-capital.com");	
+				_connection.conflation = 0 ;
+				_connection.addEventListener(ConnectionStateEvent.STATE, onConnectionState);				
+				_connection.connect(); 
+				
+				
+			}
+			
+			private function loadHestoricData():void
+			{
+				urlRequest = new URLRequest("http://www.sigma-capital.com/test/get_chart_hist_xml?codes="+CODE+"&period="+selectedSummary+"&bars="+selectedDuration);
+				urlLoader = new URLLoader();				
+				urlLoader.addEventListener(Event.COMPLETE , handleXmlLoadComplete );			
+				urlLoader.load(urlRequest);
+			}
+			
+			private function handleXmlLoadComplete(e:Event):void
+			{				
+				
+				yMin = 0 ;
+				yMax = 0 ;
+				_organizer.yMax = 0 ;
+				_organizer.yMin = 0 ;
+				
+				
+				value.main['elements'][0]['text'] = CODE + "(" + selectedSummary + ")" ;				
+				value.main['elements'][0].values = [];				
+				value.main['x_axis']['labels'].labels = [];
+				
+				if(_organizer.studyList)_organizer.initStudy();
+				
+				
+				xmlChart = new XML(e.target.data);
+				valuesXml = new ArrayCollection();
+				
+				var valuesList:XMLList = xmlChart.value ;
+				
+				for(var i:int = 0 ; i<valuesList.length() ; i++)
+				{
+					
+					var valueElement:XML = valuesList[i];
+					var percentage:Number ;
+					
+					if( i == 0)
+					{
+						percentage = 0 ;
+						yMin = Number(valueElement.attribute("Low"));
+						yMax = Number(valueElement.attribute("High"));						
+						
+					}else{
+						
+						percentage = (( Number(valueElement.attribute("Close").toString()) - value.main['elements'][0].values[0].value ) / value.main['elements'][0].values[0].value ) ;
+						if(yMax < Number(valueElement.attribute("High")))yMax = Number(valueElement.attribute("High")) ;
+						if(yMin > Number(valueElement.attribute("Low")))yMin = Number(valueElement.attribute("Low")) ;	
+						if(yMax_Comp < percentage )yMax_Comp = percentage ;
+						if(yMin_Comp > percentage )yMin_Comp = percentage ;
+						
+						
+					}
+					
+					
+					value.main['elements'][0].values.push({"timeStamp":valueElement.attribute("TimeStamp"),"value":Number(valueElement.attribute("Close").toString()),"top":Number(valueElement.attribute("Open").toString()),"high":Number(valueElement.attribute("High").toString()),"low":Number(valueElement.attribute("Low").toString()),"volume":Number(valueElement.attribute("Volume").toString()),"percentage":percentage});				
+					value.main['x_axis'].labels.labels.push(Functions.returnLabel(valueElement.attribute("TimeStamp"),selectedDuration));
+					//dateM.text = Functions.returnDateDay(valueElement.attribute("TimeStamp"));
+					
+					_organizer.yMin = yMin ;
+					_organizer.yMax = yMax ;
+					_organizer.setYaxisRange(i);
+					_organizer.addCogRecordAt(value.main['elements'][0].values , value.main['elements'][0].values.length - 1 );
+					
+				}	
+				
+				
+				chartData = new ArrayCollection(value.main['elements'][0].values);
+				chartLabels = new ArrayCollection(value.main['x_axis'].labels.labels);
+				
+				RIGHT_START = chartData.length ;
+				leftBoundary = LEFT_START;
+				rightBoundary = RIGHT_START;
+				
+				
+				yMin_SC = yMin ;
+				yMax_SC = yMax ;
+				
+				value.main['y_axis'].min = yMin ;
+				value.main['y_axis'].max = yMax ;
+				value.main['y_axis'].steps = Functions.get_steps(yMin,yMax,chartMain.height); 		
+				
+				
+				if(value.main['elements'][0].values.length > 0)
+				{
+					drawChart();  
+					if(chartMain.mainChartAdded)chartMain.build_chart(value.main);
+					_organizer.updateBoundaries(leftBoundary, rightBoundary);
+					_organizer.updateBoundariesLabels(value.main['x_axis'].labels.labels);
+				}
+				else{
+					
+					firstTimeRead = false ;
+				}			
+				
+			}		
+			
+			
+			private function drawChart():void
+			{
+				var xmlItem:Object = value.main['elements'][0].values[value.main['elements'][0].values.length -1 ];
+				TimeStamp1OldValue = xmlItem["timeStamp"];
+				
+				var startPoint:int = 0 ;
+				var percentage:Number = 0 ;
+				
+				if(valuesCog.length > 0)
+				{
+					for each( var valueC:Object in valuesCog )
+					{
+						if(_organizer.yMax < Number(valueC['High1'])) _organizer.yMax = Number(valueC['High1']) ;
+						if(_organizer.yMin > Number(valueC['Low1'])) _organizer.yMin = Number(valueC['Low1']) ;	
+						
+						percentage = (( Number(valueC['Close1']) - chartData[0].value ) / chartData[0].value ) ;
+						
+						if(yMax_Comp < percentage )yMax_Comp = percentage ;
+						if(yMin_Comp > percentage )yMin_Comp = percentage ;
+						
+						
+						
+						if( valueC["TimeStamp1"] == TimeStamp1OldValue ) 
+						{	
+							
+							
+							value.main['elements'][0].values[value.main['elements'][0].values.length - 1 ] = {"timeStamp":valueC['TimeStamp1'],"value":Number(valueC['Close1']),"top":Number(valueC['Open1']),"high":Number(valueC['High1']),"low":Number(valueC['Low1']),"volume":Number(valueC['Volume1']),"percentage":percentage} ;
+							chartData.setItemAt({"timeStamp":valueC['TimeStamp1'],"value":Number(valueC['Close1']),"top":Number(valueC['Open1']),"high":Number(valueC['High1']),"low":Number(valueC['Low1']),"volume":Number(valueC['Volume1']),"percentage":percentage} , chartData.length - 1 );
+							value.main['x_axis'].labels.labels[value.main['x_axis'].labels.labels.length - 1] = Functions.returnLabel(valueC['TimeStamp1'],selectedDuration);
+							chartLabels.setItemAt( Functions.returnLabel(valueC['TimeStamp1'],selectedDuration ) , chartLabels.length -1 ) ;
+							
+							value.main['y_axis'].min = yMin ;
+							value.main['y_axis'].max = yMax ;
+							value.main['y_axis'].steps = Functions.get_steps(yMin ,yMax ,chartMain.height);
+							
+							startPoint++ ;	
+							break ;							
+						}						
+						
+					}
+					
+					drawFromCogArray(startPoint);
+					
+				}else{
+					
+					firstTimeRead = false ;					
+					return ;
+				} 
+				
+				
+				
+			}
+			
+			private function drawFromCogArray(index:int):void
+			{
+				var percentage:Number = 0 ;
+				
+				for(var i:int = index ; i< valuesCog.length ; i++)
+				{
+					percentage = (( Number(valuesCog['Close1']) - chartData[0].value ) / chartData[0].value ) ;
+					value.main['elements'][0].values.push({"timeStamp":valuesCog['TimeStamp1'],"value":Number(valuesCog['Close1']),"top":Number(valuesCog['Open1']),"high":Number(valuesCog['High1']),"low":Number(valuesCog['Low1']),"volume":Number(valuesCog['Volume1']),"percentage":percentage});	
+					chartData.addItem({"timeStamp":valuesCog['TimeStamp1'],"value":Number(valuesCog['Close1']),"top":Number(valuesCog['Open1']),"high":Number(valuesCog['High1']),"low":Number(valuesCog['Low1']),"volume":Number(valuesCog['Volume1']),"percentage":percentage});
+					value.main['x_axis'].labels.labels.push(Functions.returnLabel(valuesCog['TimeStamp1'],selectedDuration));	
+					chartLabels.addItem(Functions.returnLabel(valuesCog['TimeStamp1'],selectedDuration));
+					
+					if(yMax < Number(valuesCog['High1'])) yMax = Number(valuesCog['High1']) ;
+					if(yMin > Number(valuesCog['Low1'])) yMin = Number(valuesCog['Low1']) ;	
+					
+					if(yMax_Comp < percentage )yMax_Comp = percentage ;
+					if(yMin_Comp > percentage )yMin_Comp = percentage ;
+					
+				}
+				
+				firstTimeRead = false ;
+				
+				_organizer.yMin = ( yMin < _organizer.yMin ) ? yMin : _organizer.yMin ;
+				_organizer.yMax = ( yMax > _organizer.yMax ) ? yMax : _organizer.yMax ;
+				
+				yMin_SC = _organizer.yMin ;
+				yMax_SC = _organizer.yMax ;
+				
+				value.main['y_axis'].min = _organizer.yMin ;
+				value.main['y_axis'].max = _organizer.yMax ;
+				value.main['y_axis'].steps = Functions.get_steps(_organizer.yMin ,_organizer.yMax ,chartMain.height);
+				
+				if(chartMain.mainChartAdded)chartMain.build_chart(value.main);				
+			}		
+			
+			
+			
+			
+			private function onConnectionState(state:ConnectionStateEvent):void
+			{		
+				if (state.state == ConnectionState.Connected)
+				{							
+					getChartDataRealTime();
+					/* trace("********************connected*************************"); */
+				}
+				
+				if (state.state == ConnectionState.Disconnected)
+				{}
+				
+				if(state.state == ConnectionState.Connecting )
+				{}
+			}
+			
+			private function dispatchMenuClick(e:MouseEvent):void
+			{
+				PopUpButton(e.target).open();
+			}
+			
+			private function settingsItemClickHandler(e:MenuEvent):void
+			{			
+				value.main['elements'][0]['type']= e.label ;				
+				//chartMain.values = value.main;
+				chartMain.build_chart(value.main);
+				chartMain.added();
+			}
+			
+			private function techIndicatorsItemClickHandler(e:MenuEvent = null):void
+			{	
+				
+				
+				var classFileName:String = e.item.@data.toString() ;
+				if(chartData != null )
+				{
+					var studyInstance:Object = _organizer.addStudy(classFileName );
+					if(studyInstance.studyParametrs != null )
+					{
+						_studyConWindow = PopUpManager.createPopUp( this , StudyConfigurationFloatWindow , true ) as StudyConfigurationFloatWindow ;
+						_studyConWindow.studyParamerts = studyInstance.studyParametrs ;	
+						_studyConWindow.study = studyInstance ;
+						_studyConWindow.addEventListener(UpdateStudySettings.UPDATE_STUDY_SETTINGS , drawStudy );
+						PopUpManager.centerPopUp(_studyConWindow);
+					}else{
+						
+						drawStudy( null , studyInstance );
+					}
+					
+					
+					
+					//study.buildChart(_allMainChartData , left , right , value.main['x_axis'].labels.labels );
+				}					
+				//if(e.item.@newPane == "false" && chartMain.mainChartAdded )chartMain.build_chart(value.main); */
+				
+				
+				
+				
+				/*var classFileName:String = e.item.@data.toString() ;
+				if(chartData != null )
+				{
+					_organizer.addStudy(classFileName , value , chartData.source , leftBoundary , rightBoundary , selectedDuration , e.item.@newPane );					 
+				}					
+				if(e.item.@newPane == "false" && chartMain.mainChartAdded )chartMain.build_chart(value.main); */
+				
+								
+			}
+			
+			private function drawStudy(e:UpdateStudySettings = null , study:Object = null ):void
+			{
+				
+				
+				switch(e)
+				{
+					case null :
+						
+						if(study.drawInNewPane)
+						{
+							_organizer.currentStudyList.addItem(study);
+							study.contructing(value , selectedDuration , chartUICon ) ;
+							study.buildChart(chartData.source , leftBoundary , rightBoundary , value.main['x_axis'].labels.labels);
+							
+						}						
+						break;
+					default:
+						
+						
+						if(e.study.drawInNewPane)
+						{
+							_organizer.currentStudyList.addItem(e.study);
+							e.study.contructing(value , selectedDuration , chartUICon ) ;
+							e.study.buildChart(chartData.source , leftBoundary , rightBoundary , value.main['x_axis'].labels.labels);
+						}else{
+							
+							_organizer.currentStudyList.addItem(e.study);
+							e.study.contructing(value , selectedDuration);
+							e.study.buildChart(chartData.source , leftBoundary , rightBoundary , value.main['x_axis'].labels.labels);
+							chartMain.build_chart(value.main);
+						}
+						
+						break ;
+				}
+				
+				_organizer.yMax = value.main['y_axis'].max ;
+				_organizer.yMin = value.main['y_axis'].min ;
+				
+				
+			}
+			
+			private function handleRemoveStudy(e:StudyPaneDeleted):void
+			{
+				_organizer.deleteStudyByName(e.studyName);
+			}
+			
+			private function handleDeleteStudyBykeyClick(e:DeleteStudyByKey):void
+			{
+				if(!e.drawInNewPane)
+				{	
+					_organizer.deleteUpperStudyBykey(e.studyIndex , value );
+					if(chartMain.mainChartAdded && !e.drawInNewPane )
+					{
+						
+						if(noCompareLines == 0)
+						{
+							isCompare = false ;
+							value.main['y_axis'].min = yMin  ;
+							value.main['y_axis'].max = yMax ;
+							value.main['y_axis'].steps = Functions.get_steps( yMin , yMax ,chartMain.height );
+						}
+					}
+					
+					chartMain.build_chart(value.main);
+				}
+								
+				
+			}
+			
+			private function addTrendLine(e:TrendLineAdded):void
+			{
+				if(chartData != null )
+					_organizer.addTrendLine("TrendLine" , value , e.point1 , e.point2 , e.pointsArray  , chartData.source , leftBoundary , rightBoundary , selectedDuration );
+				if( chartMain.mainChartAdded )chartMain.build_chart(value.main);
+			}
+			
+			private function getChartDataRealTime():void
+			{
+				_record = new Record();
+				_record.source = "Charts";
+				_record.item = CODE+"#"+selectedSummary ;
+				_record.filter = "Symbol,TimeStamp1,Starttime1,Open1,High1,Low1,Close1,Volume1";
+				_record.connection = _connection;
+				_record.conflation = 0; // if we get heaps of updates, max out at 50ms per update (==20 updates per sec)
+				_record.subscribe();				
+				_record.addEventListener(DataItemUpdateEvent.END,   onRecordUpdateEnd);
+			}
+			
+			private function onRecordUpdateEnd(event:DataItemUpdateEvent):void
+			{				
+				//updateChart(Record(event.currentTarget));				
+			}
+			
+			private function updateChart(rec:Record):void
+			{
+				if (rec == null)return;
+				
+				var percentage:Number = 0 ;
+				var valueCog:Object = new Object();			
+				
+				for (var i:int=0; i<rec.fieldCount; i++)
+				{
+					var field:RecordField = rec.getFieldByIndex(i);
+					var fieldName:String = field.name ;
+					var fieldType:DataType = field.type ;
+					
+					switch(fieldType)
+					{
+						case(DataType.Integer):
+							valueCog[fieldName.toString()] = int(field.value);
+							break;
+						case(DataType.Float):
+							valueCog[fieldName.toString()] = Number(field.value).toFixed(2);
+							break;
+						default:
+							valueCog[fieldName.toString()] = field.value;
+					}			
+					
+					
+					
+				}
+				
+				if(_organizer.yMax < Number(valueCog['High1'])) _organizer.yMax = Number(valueCog['High1']) ;
+				if(_organizer.yMin > Number(valueCog['Low1'])) _organizer.yMin = Number(valueCog['Low1']) ;
+				
+				if(firstTimeRead)
+				{
+					if(valuesCog.length > 0 )
+					{
+						if(valueCog['TimeStamp1'] == TimeStamp1OldValue)
+						{
+							valuesCog.addItemAt(valueCog , valuesCog.length - 1 );							
+							
+						}else{							
+							valuesCog.addItem(valueCog);
+							TimeStamp1OldValue = valueCog['TimeStamp1'] ;
+						}
+					}
+					
+				}else{				
+					
+					if(valueCog['TimeStamp1'] == TimeStamp1OldValue )
+					{
+						
+						trace("********************update********************");
+						percentage = (( Number(valueCog['Close1']) - chartData[0].value ) / chartData[0].value ) ;
+						value.main['elements'][0].values[value.main['elements'][0].values.length - 1] = {"timeStamp":valueCog['TimeStamp1'],"value":Number(valueCog['Close1']),"top":Number(valueCog['Open1']),"high":Number(valueCog['High1']),"low":Number(valueCog['Low1']),"volume":Number(valueCog['Volume1']),"percentage":percentage} ;
+						chartData.setItemAt({"timeStamp":valueCog['TimeStamp1'],"value":Number(valueCog['Close1']),"top":Number(valueCog['Open1']),"high":Number(valueCog['High1']),"low":Number(valueCog['Low1']),"volume":Number(valueCog['Volume1']),"percentage":percentage},chartData.length-1);
+						value.main['x_axis'].labels.labels[value.main['x_axis'].labels.labels.length - 1] = Functions.returnLabel(valueCog['TimeStamp1'],selectedDuration);
+						chartLabels.setItemAt(Functions.returnLabel(valueCog['TimeStamp1'],selectedDuration) , chartLabels.length - 1 );
+						_organizer.updateCogRecordAt(chartData.source );
+						
+					}else{					
+						//trace("******************** ADD ********************");	
+						percentage = (( Number(valueCog['Close1']) - chartData[0].value ) / chartData[0].value ) ;
+						value.main['elements'][0].values.push({"timeStamp":valueCog['TimeStamp1'],"value":Number(valueCog['Close1']),"top":Number(valueCog['Open1']),"high":Number(valueCog['High1']),"low":Number(valueCog['Low1']),"volume":Number(valueCog['Volume1']),"percentage":percentage});
+						chartData.addItem({"timeStamp":valueCog['TimeStamp1'],"value":Number(valueCog['Close1']),"top":Number(valueCog['Open1']),"high":Number(valueCog['High1']),"low":Number(valueCog['Low1']),"volume":Number(valueCog['Volume1']),"percentage":percentage});
+						value.main['x_axis'].labels.labels.push(Functions.returnLabel(valueCog['TimeStamp1'],selectedDuration));
+						chartLabels.addItem(Functions.returnLabel(valueCog['TimeStamp1'],selectedDuration));
+						_organizer.addCogRecordAt(chartData.source , chartData.length - 1 );					
+						
+					}				
+					
+					
+					if( yMax_SC < Number(valueCog['High1'])) yMax_SC = Number(valueCog['High1']) ;
+					if( yMin_SC > Number(valueCog['Low1'])) yMin_SC = Number(valueCog['Low1']) ;
+					
+					if(yMax_Comp < percentage )yMax_Comp = percentage ;
+					if(yMin_Comp > percentage )yMin_Comp = percentage ;
+					
+					if( rightBoundary >= chartData.length - 1  )
+					{	
+						//trace("rightBoundary=" + rightBoundary + " , length = " + chartData.length );
+						rightBoundary = chartData.length ;	
+						//leftBoundary ++ ;
+						leftBox.width = Math.abs((overlayCanvas.width / chartData.length) * leftBoundary) ;
+						updateMainDataFromCog();
+						
+					}else{					
+						
+						leftBox.width = Math.abs((overlayCanvas.width / chartData.length) * leftBoundary) ;
+						rightBox.width = Math.abs((overlayCanvas.width / chartData.length) * (chartData.length - rightBoundary)) ;			
+						
+					}				
+				}				
+			}
+			
+			private function updateChartSettings():void
+			{
+				if(_record.status != DataState.Closed)
+				{
+					CODE = reuterCode.text ;
+					stopRequests();	
+					valuesCog = new ArrayCollection();
+					timer.addEventListener(TimerEvent.TIMER , hadleTimerComplete );					
+					timer.start();
+					
+				}else{
+					
+					loadHestoricData();
+					getChartDataRealTime();
+				}
+			}
+			
+			private function hadleTimerComplete(e:TimerEvent):void
+			{				
+				timer.stop();
+				updateChartSettings();				
+				
+			}
+			
+			private function stopRequests():void
+			{
+				_record.removeEventListener(DataItemUpdateEvent.END, onRecordUpdateEnd );
+				_record.unsubscribe();
+			}
+			
+			private function handleTabDurationIndexChange(e:IndexChangeEvent):void
+			{				
+				if(e.newIndex != -1 )
+				{
+					selectedDuration = arrDuration.getItemAt(e.newIndex).data ;
+					if(selectedDuration == "1" )
+					{
+						selectedSummary = "T";
+						
+					}else if(selectedDuration == "7" || selectedDuration == "14" ||  selectedDuration == "21" )
+					{
+						selectedSummary = "10M";
+						
+					}else if( selectedDuration == "30" || selectedDuration == "60" || selectedDuration == "90" || selectedDuration == "180")
+					{
+						selectedSummary = "30M";
+						
+					}else if(  selectedDuration == "270" || selectedDuration == "360")
+					{
+						
+						selectedSummary = "1H";
+					}else{
+						
+						selectedSummary = "1D";
+					}
+					updateChartSettings();
+				}
+			}
+			
+			private function handleChartSummary(e:IndexChangeEvent):void
+			{	
+				var pionter:int ;
+				
+				for(var i:int = 0 ; i < summaryArray.length ; i++ )
+				{
+					if(selectedSummary == summaryArray[i])
+					{
+						pionter = i ;
+						break;
+					}
+				}			
+				
+				if(e.newIndex != -1){				
+					
+					switch(arrZoom.getItemAt(e.newIndex).label)
+					{
+						case("+"):
+							if( pionter != 0 )
+							{
+								pionter-- ;
+								selectedSummary = summaryArray[pionter];
+								updateChartSettings();
+							}
+							
+							break;
+						case("-"):
+							if( pionter != summaryArray.length )
+							{
+								pionter++;
+								selectedSummary = summaryArray[pionter];
+								updateChartSettings();
+							}							
+							break;						
+					}
+					
+					
+				}
+				else{					
+					
+					switch(arrZoom.getItemAt(e.oldIndex).label)
+					{
+						case("+"):
+							if( pionter != 0 ){
+								
+								pionter-- ;
+								selectedSummary = summaryArray[pionter];
+								updateChartSettings();
+							}
+							break;
+						case("-"):
+							if( pionter != summaryArray.length )
+							{
+								pionter++;
+								selectedSummary = summaryArray[pionter];
+								updateChartSettings();
+							}							
+							break;					
+					}					
+				}				
+			}			
+			
+			
+			private function updateBoundariesFromSlider():void
+			{
+				
+				if( leftBoundary <= 0 )
+				{
+					leftBoundary = 0 ;
+					this.systemManager.addEventListener(MouseEvent.MOUSE_UP, stopDragging);
+				}
+				
+				if( rightBoundary >= chartData.length  )
+				{
+					rightBoundary = chartData.length  ;
+					this.systemManager.addEventListener(MouseEvent.MOUSE_UP, stopDragging);
+				}
+				
+				updateMainData();
+			}
+			
+			private function updateBoundariesFromDivider(event:DividerEvent):void
+			{
+				leftBoundary = Math.abs(HDividedBox(event.target).getChildAt(0).width / (event.target.width / chartData.length));
+				rightBoundary = Math.abs(chartData.length - (HDividedBox(event.target).getChildAt(2).width / (event.target.width / chartData.length)));
+				if( leftBoundary <= 0 )
+				{
+					leftBoundary = 0 ;
+					this.systemManager.addEventListener(MouseEvent.MOUSE_UP, stopDragging);
+				}
+				
+				if( rightBoundary >= chartData.length  )
+				{
+					rightBoundary = chartData.length  ;
+					this.systemManager.addEventListener(MouseEvent.MOUSE_UP, stopDragging);
+				}				
+				updateMainData();
+			}
+			
+			private function updateMainData():void
+			{
+				yMin_Comp = 0 ;
+				yMax_Comp = 0 ;
+				
+				var visibleChart:Array = chartData.source.slice(leftBoundary, rightBoundary);
+				var visibleChartLabels:Array = chartLabels.source.slice(leftBoundary , rightBoundary ) ;
+				value.main['elements'][0].values = visibleChart ;
+				value.main['x_axis'].labels.labels = visibleChartLabels ;
+				
+				for(var i:int = 0 ; i< visibleChart.length ; i++)
+				{					
+					if( i == 0)
+					{
+						
+						if(!isCompare)
+						{
+							yMin = Number(visibleChart[i]["low"]);
+							yMax = Number(visibleChart[i]["high"]);
+							_organizer.yMin = yMin ;
+							_organizer.yMax = yMax ;
+							
+						}else{
+							
+							yMax_Comp = Number(visibleChart[i]["percentage"]) ;
+							yMin_Comp = Number(visibleChart[i]["percentage"]) ;
+							_organizer.yMin = yMin_Comp ;
+							_organizer.yMax = yMax_Comp ; 
+						}
+						
+						
+						/* if(isCompare)
+						{
+							
+							
+						}else{
+							
+							
+						} */
+						
+						
+					}else
+					{							
+						if(isCompare)
+						{
+							if(yMax_Comp < Number(visibleChart[i]["percentage"]) )yMax_Comp = Number(visibleChart[i]["percentage"]) ;
+							if(yMin_Comp > Number(visibleChart[i]["percentage"]) )yMin_Comp = Number(visibleChart[i]["percentage"]) ;
+						}else{
+							
+							if(yMax < Number(visibleChart[i]["high"]))yMax = Number(visibleChart[i]["high"]) ;
+							if(yMin > Number(visibleChart[i]["low"]))yMin = Number(visibleChart[i]["low"]) ;
+						}
+						
+						
+					}				
+					_organizer.setYaxisRange(i);					
+				}
+				
+				_organizer.updateBoundaries(leftBoundary, rightBoundary);				
+				_organizer.updateBoundariesLabels(value.main['x_axis'].labels.labels);
+				
+				
+				if(!isCompare)
+				{
+					yMin = ( _organizer.yMin < yMin )? _organizer.yMin : yMin ;
+					yMax = ( _organizer.yMax > yMax )? _organizer.yMax : yMax ;
+					
+					value.main['y_axis'].min = yMin ;
+					value.main['y_axis'].max = yMax ;
+					value.main['y_axis'].steps = Functions.get_steps(yMin ,yMax ,chartMain.height);
+					
+				}else{
+					
+					yMin_Comp = ( _organizer.yMin < yMin_Comp )? _organizer.yMin : yMin_Comp ;
+					yMax_Comp = ( _organizer.yMax > yMax_Comp )? _organizer.yMax : yMax_Comp ;
+					
+					value.main['y_axis'].min = yMin_Comp ;
+					value.main['y_axis'].max = yMax_Comp ;
+					value.main['y_axis'].steps = Functions.get_steps(yMin_Comp ,yMax_Comp ,chartMain.height);				
+					
+				}	
+				 			
+				
+				if(chartMain.mainChartAdded)chartMain.build_chart(value.main);
+				
+			}
+			
+			
+			private function updateMainDataFromCog():void
+			{
+				
+				var visibleChart:Array = chartData.source.slice(leftBoundary, rightBoundary);
+				var visibleChartLabels:Array = chartLabels.source.slice(leftBoundary , rightBoundary ) ;
+				value.main['elements'][0].values = visibleChart ;
+				value.main['x_axis'].labels.labels = visibleChartLabels ;
+				
+				_organizer.updateBoundaries(leftBoundary, rightBoundary);				
+				_organizer.updateBoundariesLabels(value.main['x_axis'].labels.labels);				
+				
+										
+				if(yMax < Number(visibleChart[visibleChart.length - 1]["high"]))yMax = Number(visibleChart[visibleChart.length - 1]["high"]) ;
+				if(yMin > Number(visibleChart[visibleChart.length - 1]["low"]))yMin = Number(visibleChart[visibleChart.length - 1]["low"]) ;						
+						
+				_organizer.setYaxisRange(visibleChart.length - 1);					
+								
+				yMin = ( _organizer.yMin < yMin )? _organizer.yMin : yMin ;
+				yMax = ( _organizer.yMax > yMax )? _organizer.yMax : yMax ;
+				
+				value.main['y_axis'].min = yMin ;
+				value.main['y_axis'].max = yMax ;
+				value.main['y_axis'].steps = Functions.get_steps(yMin ,yMax ,chartMain.height); 			
+				
+				if(chartMain.mainChartAdded)chartMain.build_chart(value.main);
+				
+				
+			}
+			
+			private function setMouseDown(theChart:*):void
+			{
+				mouseXRef = mouseX;
+				if( leftBoundary <= 0 )
+				{
+					leftBoundary = 0 ;
+					
+				}
+				
+				if( rightBoundary >= chartData.length  )
+				{
+					rightBoundary = chartData.length  ;
+					
+				}
+				staticLeftBoundary = leftBoundary;
+				staticRightBoundary = rightBoundary;				
+				if(theChart == smallChart) smallDrag = true;
+				if(theChart == chartMain) bigDrag = true;
+				this.systemManager.addEventListener(MouseEvent.MOUSE_MOVE, moveChart);
+				this.systemManager.addEventListener(MouseEvent.MOUSE_UP, stopDragging); 
+			}
+			
+			private function stopDragging(event:MouseEvent):void
+			{
+				smallDrag = false;
+				bigDrag = false;
+				this.systemManager.removeEventListener(MouseEvent.MOUSE_MOVE, moveChart);
+				this.systemManager.removeEventListener(MouseEvent.MOUSE_UP, stopDragging); 
+			}
+			
+			private function moveChart(event:MouseEvent):void
+			{
+				if(smallDrag)
+				{
+					leftBoundary = staticLeftBoundary - (mouseXRef - this.mouseX) / (smallChart.width / chartData.length);
+					rightBoundary = staticRightBoundary - (mouseXRef - this.mouseX) / (smallChart.width / chartData.length);
+					
+				}				
+				if(bigDrag)
+				{
+					leftBoundary = staticLeftBoundary + (mouseXRef - this.mouseX) / (chartMain.width / chartData.length);
+					rightBoundary = staticRightBoundary + (mouseXRef - this.mouseX) / (chartMain.width / chartData.length);
+				}
+				
+				if( leftBoundary <= 0 )
+				{
+					leftBoundary = 0 ;
+					this.systemManager.addEventListener(MouseEvent.MOUSE_UP, stopDragging);
+				}
+				
+				if( rightBoundary >= chartData.length  )
+				{
+					rightBoundary = chartData.length  ;
+					this.systemManager.addEventListener(MouseEvent.MOUSE_UP, stopDragging);
+				}
+				
+				updateBoundariesFromSlider(); 
+			}
+			
+			
+			import sigma.drawingTools.classes.DrawingTool;
+			import sigma.drawingTools.classes.TrendLineTool;
+			import sigma.drawingTools.classes.DrawingTool;
+			import sigma.drawingTools.classes.VerticalLineTool;
+			
+			private var selectedTool:Class;
+			
+			
+			
+			private function trendLineToolClicked(event:Event):void{
+				//btnRectangleTool.selected = !trendBtnLineTool.selected;
+				//verticalLineTool.selected = !trendBtnLineTool.selected;
+				
+				
+				if(selectedTool != sigma.drawingTools.classes.TrendLineTool )
+				{
+					horizontalLineTool.selected = !trendBtnLineTool.selected;
+					selectedTool = sigma.drawingTools.classes.TrendLineTool;
+					
+					
+				}else{
+					
+					trendBtnLineTool.selected = false ;
+					selectedTool = null ;
+					
+				}
+				
+				chartMain.trendLineBtnClicked(selectedTool) ;
+				
+			}
+			
+			/* private function rectangleToolClicked(event:Event):void{
+				trendBtnLineTool.selected = !btnRectangleTool.selected;
+				verticalLineTool.selected = !btnRectangleTool.selected;
+				horizontalLineTool.selected = !btnRectangleTool.selected;
+				chartMain.selectedTool = sigma.drawingTools.classes.RectangleTool;
+			}*/
+			
+			/*private function verticalLineToolClicked(event:Event):void
+			{
+				trendBtnLineTool.selected = !verticalLineTool.selected;
+				//btnRectangleTool.selected = !verticalLineTool.selected;
+				horizontalLineTool.selected = !verticalLineTool.selected;
+				chartMain.selectedTool = VerticalLineTool;
+			} */
+			
+			private function horizontalLineToolClicked(event:Event):void
+			{
+				/* trendBtnLineTool.selected = !horizontalLineTool.selected;
+				btnRectangleTool.selected = !horizontalLineTool.selected;
+				verticalLineTool.selected = !horizontalLineTool.selected; */
+				//trace(event.currentTarget.toggle);
+				
+				
+				if(selectedTool != sigma.drawingTools.classes.HorizontalLineTool )
+				{
+					trendBtnLineTool.selected = !horizontalLineTool.selected;
+					selectedTool = sigma.drawingTools.classes.HorizontalLineTool;					
+					
+				}else{
+					horizontalLineTool.selected = false ;
+					selectedTool = null ;
+				}	
+				
+				chartMain.trendLineBtnClicked(selectedTool) ;
+				
+			}
+			
+			private function deleteAllTrend():void
+			{
+				_organizer.deleteAllTrendLines(value);
+				if(chartMain.mainChartAdded)chartMain.build_chart(value.main);
+				
+			}
+			
+			private function handleCompare():void
+			{
+				_compareWindowOptions = PopUpManager.createPopUp(this,CompareWindow) as CompareWindow;
+				_compareWindowOptions.addEventListener(CompareEvent.ADD_TO_COMPARE , handleAddedToCompare ) ;
+				PopUpManager.centerPopUp(_compareWindowOptions);								
+			}
+			
+			private function handleAddedToCompare(e:CompareEvent):void
+			{
+				if(!isCompare)
+				{
+					for each(var o:Object in value.main['elements'])
+					{
+						o.type = "line-compare";
+					}
+					
+					value.main['y_axis'].min = yMin_Comp ;
+					value.main['y_axis'].max = yMax_Comp ;
+					isCompare = true ;
+					yMin_Comp = 0 ;
+					yMax_Comp = 0 ;
+				}
+				
+				
+				
+				if(e.CODE != "" && e.CODE != null)
+				{	
+					urlRequest = new URLRequest("http://www.sigma-capital.com/test/get_chart_hist_xml?codes="+e.CODE+"&period="+selectedSummary+"&bars="+selectedDuration);
+					urlLoader = new URLLoader();				
+					urlLoader.addEventListener(Event.COMPLETE , function(evt:Event):void
+					{
+						
+						
+						var obj:CompareStudy = _organizer.addStudy("CompareStudy")as CompareStudy;					
+						_organizer.currentStudyList.addItem(obj);
+						obj.studyName = e.CODE ;
+						obj.contructing(value , selectedSummary , chartMain.screenCoords );						
+						obj.buildChart( evt.target.data , leftBoundary , rightBoundary , chartLabels.source );
+						
+						
+						
+						value.main['y_axis'].min = ( value.main['y_axis'].min < obj.yMin ) ? value.main['y_axis'].min :  obj.yMin  ;
+						value.main['y_axis'].max = ( value.main['y_axis'].max > obj.yMax ) ? value.main['y_axis'].max :  obj.yMax ;
+						value.main['y_axis'].steps = Functions.get_steps( value.main['y_axis'].min , value.main['y_axis'].max ,chartMain.height);
+						
+						chartMain.build_chart(value.main);
+						
+						
+					} );			
+					urlLoader.load(urlRequest);
+					noCompareLines ++ ;
+					
+				}					
+				
+					
+			}
+			
+			private function handleXmlForComparedLoadComplete(e:Event):void
+			{
+				
+			}
+			
+		]]>
+	</fx:Script>
+	<flexmdi:MDIDockCanvas snapDistance="12" windowGap="0" id="mdiCanvas" horizontalScrollPolicy="auto" verticalScrollPolicy="auto" enforceBoundaries="false" disableTopLeft="true" width="100%" height="100%">
+	<flexmdi:MDIWindow x="100" y="100" height="400" >
+	<mx:VBox top="5" left="5" width="100%">
+		<mx:HBox>
+			<mx:PopUpButton id="lineTypeSettings" popUp="{settingsMenu}" label="Settings" mouseOver="dispatchMenuClick(event);" chromeColor="0xCCCCCC"  />
+			<mx:PopUpButton id="techIndicators" popUp="{techIndicatorsMenu}" label="Technical Indicators" mouseOver="dispatchMenuClick(event);" chromeColor="0xCCCCCC" />			
+			
+			<s:Group>
+				<s:layout>
+					<s:HorizontalLayout />					
+				</s:layout>
+				<s:TextInput width="150" id="reuterCode" text="{CODE}" />
+				<s:Button width="50" label="Add" click="updateChartSettings()" />
+				<s:Button label="Compare" width="75" click="handleCompare()" />
+				<s:HGroup>
+					<!--<mx:Button width="50" id="verticalLineTool" icon="@Embed('sigma/assets/LineTool.png')" click="verticalLineToolClicked(event)" toggle="true"/>-->
+					<mx:Button width="25" id="horizontalLineTool" icon="@Embed('sigma/assets/LineTool.png')" click="horizontalLineToolClicked(event)" toggle="true"/>
+					<mx:Button width="25" id="trendBtnLineTool" icon="@Embed('sigma/assets/LineTool.png')" click="trendLineToolClicked(event)" toggle="true"/>
+					<!--<mx:Button width="50" id="btnRectangleTool" icon="@Embed('sigma/assets/RectangleTool.png')" click="rectangleToolClicked(event)" toggle="true"/>-->
+					<mx:Button width="25" id="deleteTrendBtn" label="x" click="deleteAllTrend()" />
+				</s:HGroup>
+			</s:Group>
+		</mx:HBox>	
+		<mx:VBox width="100%" height="100%" verticalGap="0" verticalScrollPolicy="off" horizontalAlign="left" >
+			<mx:VDividedBox dividerAffordance="2" horizontalGap="2" verticalGap="2" id="chartUICon" width="100%">
+				<local:Chart width="100%" height="350" id="chartMain" addedToStage="{chartMain.values = value.main }" mouseWheel="setMouseDown(chartMain)" />
+				<!--<local:Chart width="950" height="350" id="chartMain" addedToStage="{chartMain.values = value.main }" mouseDown="setMouseDown(chartMain)" />-->
+				<!--<local:ChartWzNoTitle width="550" height="100" id="chartVolume" addedToStage="{chartVolume.values = value.volume }" />-->
+			</mx:VDividedBox>
+			<s:HGroup width="100%" paddingLeft="27">
+				<mx:CartesianChart id="smallChart" width="100%" height="50" dataProvider="{chartData}" 	showDataTips="true"  >					
+					<mx:horizontalAxis>	<mx:CategoryAxis categoryField="timeStamp"/></mx:horizontalAxis>					
+					<mx:horizontalAxisRenderer>	<mx:AxisRenderer visible="false" /></mx:horizontalAxisRenderer>				
+					<mx:verticalAxis>
+						<mx:LinearAxis minimum="{yMin_SC}" maximum="{yMax_SC}" />
+					</mx:verticalAxis>					
+					<mx:verticalAxisRenderer>
+						<mx:AxisRenderer visible="true"  />
+					</mx:verticalAxisRenderer>					
+					<mx:series>						
+						<mx:AreaSeries name="y" yField="value" areaStroke="{areaStroke}" areaFill="{areaColor}" />
+					</mx:series>
+					
+					<mx:annotationElements>
+						<mx:HDividedBox id="overlayCanvas" width="100%" alpha="1" dividerAffordance="5" liveDragging="true" horizontalGap="10" verticalGap="0" horizontalScrollPolicy="off" 
+										dividerRelease="updateBoundariesFromDivider(event)" dividerSkin="{blankDividerClass}"
+										mouseOver="overlayCanvas.setStyle('dividerSkin', dividerClass);" mouseOut="overlayCanvas.setStyle('dividerSkin', blankDividerClass);">
+							<mx:Canvas id="leftBox" height="100%"
+									   width="{(overlayCanvas.width / chartData.length) * leftBoundary}" 
+									   backgroundAlpha="0.6" backgroundColor="#eeeeee" borderColor="#999999" borderStyle="solid" />
+							<mx:Canvas id="visibleBox" width="100%" height="100%" alpha="0" backgroundColor="#330000" buttonMode="true" mouseDown="setMouseDown(smallChart)" />
+							<mx:Canvas id="rightBox" height="100%" 
+									   width="{(overlayCanvas.width / chartData.length) * (chartData.length - rightBoundary)}" 
+									   backgroundAlpha="0.6" backgroundColor="#eeeeee" borderColor="#330000" borderStyle="solid"/>
+						</mx:HDividedBox>
+					</mx:annotationElements>
+					
+				</mx:CartesianChart>
+			</s:HGroup>			
+		</mx:VBox>		
+		<mx:HBox>
+			<s:ButtonBar id="duration" dataProvider="{arrDuration}" fontSize="9" selectedIndex="0" change="handleTabDurationIndexChange(event)"  >
+				<s:layout>
+					<s:HorizontalLayout gap="-1" columnWidth="35" variableColumnWidth="false" />
+				</s:layout>
+			</s:ButtonBar>
+			<s:ButtonBar id="zoom" dataProvider="{arrZoom}" fontSize="9" requireSelection="false" selectedIndex="0" change="handleChartSummary(event);" >
+				<s:layout>
+					<s:HorizontalLayout gap="-1" columnWidth="35" variableColumnWidth="false" />
+				</s:layout>
+			</s:ButtonBar>
+			<!-- <s:TextInput id="dateM" width="100" /> -->
+		</mx:HBox>
+	</mx:VBox>	
+		</flexmdi:MDIWindow></flexmdi:MDIDockCanvas>
+</s:Application>

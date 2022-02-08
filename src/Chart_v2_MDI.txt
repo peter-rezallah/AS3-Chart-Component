@@ -1,0 +1,463 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx" minWidth="955" minHeight="600" xmlns:local="*" xmlns:flexmdi="sigma.flexmdi.containers.*" resize="resize()" initialize="oninitialize()">
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		@namespace mx "library://ns.adobe.com/flex/mx";
+		@namespace local "*";
+		mx|PopUpButton{font-size:11px;popUpStyleName: myCustomPopUpStyleName;}
+		.myCustomPopUpStyleName {fontWeight: normal;textAlign: left}
+
+	</fx:Style>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+		<fx:XMLList id="linetypeDp">						
+			<Object label="area" date="area" />
+			<Object label="line" date="line" />
+			<Object label="candle" date="candle" />
+			<Object label="ohlc" date="ohlc" />
+			<Object label="hilo" date="hilo" />
+			<Object type="separator" />
+			<Object label="Configurtion" date="" >
+				<fx:Object label="Reset Configuration" data="" />
+				<fx:Object label="Export Image" />
+				<fx:Object label="Export Excell" />
+				<fx:Object label="View UnderLine Data" />
+				<fx:Object label="Print Chart" />
+			</Object>
+		</fx:XMLList>
+		
+		<fx:XMLList id="indicatorsTypeDp">						
+			<Object label="Upper Indicators" date="" >
+				<Object label="Bollinger Bands (BANDS)" date="" />
+				<Object label="Exponential Moving Average (EMA)" date="" />
+				<Object label="Simple Moving Average (SMA)" date="" />				
+			</Object>	
+			<Object label="Lower Indicators" date="" >	
+				<Object label="MACD" date="" />
+				<Object label="Money Flow" date="" />
+				<Object label="Momentum" date="" />
+				<Object label="On Balance Volume (OBV)" date="" />
+				<Object label="Rate Of Change (ROC)" date="" />
+				<Object label="Relative Strength Index (RSI)" date="" />
+				<Object label="Volume" date="" />
+				<Object label="Volume+" date="" />
+				<Object label="Wiliiams %R" date="" />
+				<Object label="P/E Ratio" date="" />
+				<Object label="P/E" date="Ranges" />
+				<Object label="Yield" date="" />
+			</Object>	
+			<Object type="separator" />
+			<Object label="Draw Trendlines" date="" />
+			<Object label="Clear Trendlines" date="" />				
+		</fx:XMLList>		
+		
+		<s:ArrayList id="arrDuration">
+			<fx:Object label="1D" data="1d" />
+			<fx:Object label="1W" data="1w" />
+			<fx:Object label="2W" data="2w" />
+			<fx:Object label="3W" data="3w" />
+			<fx:Object label="1M" data="1m" />
+			<fx:Object label="3M" data="3m" />
+			<fx:Object label="6M" data="6m" />
+			<fx:Object label="9M" data="9m" />
+			<fx:Object label="1Y" data="1y" />
+			<fx:Object label="2Y" data="2y" />
+			<fx:Object label="3Y" data="3y" />
+		</s:ArrayList>
+		<s:ArrayList id="arrZoom">
+			<fx:Object label="L" data="left" />
+			<fx:Object label="R" data="right" />
+			<fx:Object label="+" data="+" />
+			<fx:Object label="-" data="-" />			
+		</s:ArrayList>
+		
+
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import cog.data3.*;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Menu;
+			import mx.core.UIComponent;
+			import mx.events.MenuEvent;
+			import mx.events.ResizeEvent;
+			import mx.messaging.messages.ErrorMessage;
+			
+			import spark.events.IndexChangeEvent;
+			
+			
+			private var _connection:Connection ;
+			private var urlRequest:URLRequest ;
+			private var urlLoader:URLLoader;
+			private var valuesXml:ArrayCollection ;
+			private var valuesCog:ArrayCollection ;
+			private var xmlChart:XML;
+			private var value:Object;
+			private var _record:Record = new Record();
+			
+			[Bindable]
+			private var settingsMenu:Menu ;
+			[Bindable]
+			private var techIndicatorsMenu:Menu ;	
+			
+			private var yMax:Number = 0 ;
+			private var yMin:Number = 0;
+			private var ySteps:Number = 0;
+			private var CODE:String = "EGX30";
+			
+
+			
+			private function resize():void
+			{
+				if(chartMain)
+				{
+					chartMain.dispatchEvent(new ResizeEvent(ResizeEvent.RESIZE));
+				}
+				
+			}
+			
+			private function oninitialize():void
+			{
+				valuesCog = new ArrayCollection();
+				
+				
+				
+				urlRequest = new URLRequest("http://www.sigma-capital.com/test/get_chart_hist_xml?codes="+CODE+"&period=T&bars=1");
+				urlLoader = new URLLoader();
+				urlLoader.addEventListener(Event.COMPLETE , handleXmlLoadComplete );			
+				urlLoader.load(urlRequest);
+				
+				settingsMenu = new Menu();
+				settingsMenu.dataProvider = linetypeDp ;
+				settingsMenu.labelField = "@label";				
+				settingsMenu.addEventListener(MenuEvent.ITEM_CLICK , settingsItemClickHandler );
+				
+				techIndicatorsMenu = new Menu();
+				techIndicatorsMenu.dataProvider = indicatorsTypeDp ;
+				techIndicatorsMenu.labelField = "@label";
+				techIndicatorsMenu.addEventListener(MenuEvent.ITEM_CLICK , techIndicatorsItemClickHandler );			
+				
+				
+			}
+			
+			private function handleXmlLoadComplete(e:Event):void
+			{
+				
+				
+				xmlChart = new XML(e.target.data);
+				valuesXml = new ArrayCollection();
+				
+				var valuesList:XMLList = xmlChart.value ;
+				value = new Object();
+				value['bg_colour'] = "#ffffff";
+				value['elements'] = [];
+				value['elements'][0] = [];
+				value['elements'][0]['colour'] = "#736AFF";
+				value['elements'][0]['font-size'] = 10 ;
+				value['elements'][0]['type']="area";
+				value['elements'][0]['fill']="#343399";
+				value['elements'][0]['fill-alpha']= 0.5;
+				//value['elements'][0]['negative-colour']= "#d04040";
+				value['elements'][0]['tip']= "#x_label#<br>High: #high#<br>Open: #open#<br>Close: #close#<br>Low: #low#";
+				value['elements'][0].values = [];
+				value['title'] = [];
+				value['title'].text = " chart test ";
+				value['y_axis'] = [];
+				value['y_axis']['stroke'] = 1;
+				value['y_axis']['grid-colour'] = "#dddddd";
+				value['y_axis']['colour'] = "#c6d9fd";
+				
+				
+				value['x_axis'] = [];
+				value['x_axis']['steps'] = 30 ;
+				
+				value['x_axis']['offset'] = false ;
+				value['x_axis']['stroke'] = 1;
+				value['x_axis']['colour'] = "#c6d9fd";
+				value['x_axis']['grid-colour'] = '#dddddd';
+				value['x_axis'].labels = [];
+				//value['x_axis'].min = "10:30";
+				//value['x_axis'].max = "14:30";
+				value['x_axis']['labels']['visible-steps'] = 50 ;
+				value['x_axis']['labels'].labels = [];
+				//value['x_axis']['labels'].labels = ["10:30","10:45","11:00","11:15","11:30","11:45","12:00","12:15","12:30","12:45","13:00","13:15","13:30","13:45","14:00","14:15","14:30"];
+				
+				for(var i:int = 0 ; i<valuesList.length() ; i++)
+				{
+					
+					var valueElement:XML = valuesList[i];
+					
+					
+					/*value.TimeStamp = valueElement.attribute("TimeStamp");
+					value.Starttime = valueElement.attribute("Starttime");
+					value.open = valueElement.attribute("Open");
+					 value.high = valueElement.attribute("High");
+					value.low = valueElement.attribute("Low");
+					value.close = valueElement.attribute("Close");
+					value.volume = valueElement.attribute("Volume"); */
+					
+					if( i == 0)
+					{
+						yMin = Number(valueElement.attribute("Low"));
+						yMax = Number(valueElement.attribute("High"));
+					}else{
+						
+						if(yMax < Number(valueElement.attribute("High")))yMax = Number(valueElement.attribute("High")) ;
+						if(yMin > Number(valueElement.attribute("Low")))yMin = Number(valueElement.attribute("Low")) ;
+						
+					}
+					
+					
+					
+					value['elements'][0].values.push({"bottom":Number(valueElement.attribute("Close").toString()),"top":Number(valueElement.attribute("Open").toString()),"high":Number(valueElement.attribute("High").toString()),"low":Number(valueElement.attribute("Low").toString()),"volume":Number(valueElement.attribute("Volume").toString())});				
+					value['x_axis'].labels.labels.push(returnDate(valueElement.attribute("TimeStamp")));
+					dateM.text = returnDateDay(valueElement.attribute("TimeStamp"));
+				}	
+				
+				
+				value['y_axis'].min = yMin ;
+				value['y_axis'].max = yMax ;
+				value['y_axis'].steps = get_steps(yMin,yMax,chartMain.height); 
+				
+				/*  value['y_axis'].steps = 0.05; */ 
+				
+				
+				_connection = new Connection("streamer.sigma-capital.com");	
+				_connection.conflation = 0 ;
+				_connection.addEventListener(ConnectionStateEvent.STATE, onConnectionState);				
+				_connection.connect();
+				
+				
+			}
+			
+			private function returnDate(s:String):String
+			{
+				var parts:Array = s.split(" ");
+				var date:String = parts[0];
+				var time:String = parts[1];
+				
+				var dateStr:Array = date.split("/");
+				var d:int = int(dateStr[0]);
+				var m:Number = dateStr[1];
+				var y:Number = dateStr[2];
+				try
+				{
+					var timeStr:Array = time.split(":");
+					var h:Number = timeStr[0];
+					var mn:Number = timeStr[1];
+					var se:Number = timeStr[2];
+				}
+				catch(e:ErrorMessage)
+				{
+					h =0;
+					mn=0;
+					se=0;
+				}
+				var cDate:Date = new Date(y,m-1,d,h,mn,se,0);
+				return h+":"+mn ;
+			}
+			
+			private function returnDateDay(s:String):String
+			{
+				var parts:Array = s.split(" ");
+				var date:String = parts[0];
+				var time:String = parts[1];
+				
+				var dateStr:Array = date.split("/");
+				var d:int = int(dateStr[0]);
+				var m:Number = dateStr[1];
+				var y:Number = dateStr[2];
+				try
+				{
+					var timeStr:Array = time.split(":");
+					var h:Number = timeStr[0];
+					var mn:Number = timeStr[1];
+					var se:Number = timeStr[2];
+				}
+				catch(e:ErrorMessage)
+				{
+					h =0;
+					mn=0;
+					se=0;
+				}
+				var cDate:Date = new Date(y,m-1,d,h,mn,se,0);
+				return m-1+"/"+d+"/"+y ;
+			}
+			
+			
+			private function onConnectionState(state:ConnectionStateEvent):void
+			{		
+				if (state.state == ConnectionState.Connected)
+				{							
+					getChartDataRealTime();
+				}
+				
+				if (state.state == ConnectionState.Disconnected)
+				{				
+					
+					
+				}
+				
+				if(state.state == ConnectionState.Connecting )
+				{				
+					
+					
+				}
+				
+				
+				
+			}
+			
+			private function dispatchMenuClick(e:MouseEvent):void
+			{
+				PopUpButton(e.target).open();
+			}
+			
+			private function settingsItemClickHandler(e:MenuEvent):void
+			{
+				//chartMain.die();
+				value['elements'][0]['type']= e.label ;
+				chartMain.values = value;				
+				chartMain.added();				
+			}
+			
+			private function techIndicatorsItemClickHandler(e:MenuEvent):void
+			{
+				
+			}
+			
+			private function getChartDataRealTime():void
+			{
+				_record = new Record();
+				_record.source = "Charts";
+				_record.item = CODE+"#T" ;
+				_record.filter = "Symbol,TimeStamp1,Starttime1,Open1,High1,Low1,Close1,Volume1";
+				_record.connection = _connection;
+				_record.conflation = 0; // if we get heaps of updates, max out at 50ms per update (==20 updates per sec)
+				_record.subscribe();				
+				_record.addEventListener(DataItemUpdateEvent.END,   onRecordUpdateEnd);
+			}
+			
+			private function onRecordUpdateEnd(event:DataItemUpdateEvent):void
+			{
+				updateChart(Record(event.currentTarget));
+				
+			}
+			
+			private function updateChart(rec:Record):void
+			{
+				if (rec == null)return;
+				
+				var valueCog:Object = new Object();			
+				
+				for (var i:int=0; i<rec.fieldCount; i++)
+				{
+					var field:RecordField = rec.getFieldByIndex(i);
+					var fieldName:String = field.name ;
+					var fieldType:DataType = field.type ;
+					
+					switch(fieldType)
+					{
+						case(DataType.Integer):
+							valueCog[fieldName.toString()] = int(field.value);
+							break;
+						case(DataType.Float):
+							valueCog[fieldName.toString()] = Number(field.value).toFixed(2);
+							break;
+						default:
+							valueCog[fieldName.toString()] = field.value;
+					}
+					
+					
+						
+						if(yMax < Number(valueCog['High1'])) yMax = Number(valueCog['High1']) ;
+						if(yMin > Number(valueCog['Low1'])) yMin = Number(valueCog['Low1']) ;
+						
+					
+					
+				}
+				
+				value['elements'][0].values.push({"bottom":Number(valueCog['Close1']),"top":Number(valueCog['Open1']),"high":Number(valueCog['High1']),"low":Number(valueCog['Low1']),"volume":Number(valueCog['Volume1'])});				
+				value['x_axis'].labels.labels.push(returnDate(valueCog['TimeStamp1']));
+				//valuesCog.addItem(value);
+				//chartMain.added();
+				
+				value['y_axis'].min = yMin ;
+				value['y_axis'].max = yMax ;
+				value['y_axis'].steps = get_steps(yMin ,yMax ,chartMain.height); 
+				
+				chartMain.build_chart(value);
+			}
+			
+			
+			private function handleTabDurationIndexChange(e:IndexChangeEvent):void
+			{
+				trace(arrDuration.getItemAt(e.newIndex).label);
+			}
+			
+			private function get_steps(min:Number, max:Number, height:Number):Number {
+				// try to avoid infinite loops...			
+			
+				
+				// how many steps (grid lines) do we have?
+				var steps:Number = 0.00;
+								
+				if( max - min > 0.00 && max - min < 0.05 ) steps = 0.01 ;  
+				if( max - min >= 0.05 && max - min < 0.09 ) steps = 0.02 ;
+				if( max - min >= 0.09 && max - min < 9.99 ) steps = (max - min) / 5;
+				if( max - min >= 9.99 && max - min < 19.99 ) steps = 1 ;
+				if( max - min >= 19.99 && max - min < 29.99 ) steps = 2 ;
+				if( max - min >= 29.99 && max - min < 49.99 ) steps = 5 ;
+				if( max - min >= 49.99 && max - min < 99.99 ) steps = 10 ;
+				if( max - min >= 99.99 && max - min < 999.99 ) steps = 20 ;
+				if( max - min >= 999.99 ) steps = 30 ;
+				
+				var s:Number = (max - min) / steps;
+				
+				if ( s > (height/2) ) {
+					// either no steps are set, or they are wrong and
+					// we have more grid lines than pixels to show them.
+					// E.g: 
+					//      max = 1,001,000
+					//      min =     1,000
+					//      s   =   200,000
+					return (max - min) / 5;
+				}
+				
+				trace("S="+steps);
+				return steps;
+			}
+			
+		]]>
+	</fx:Script>
+	<flexmdi:MDIDockCanvas snapDistance="12" windowGap="0" id="mdiCanvas" horizontalScrollPolicy="auto" verticalScrollPolicy="auto" enforceBoundaries="false" disableTopLeft="true" width="100%" height="100%">
+		<flexmdi:MDIWindow x="100" y="100" height="400" width="500" >
+			<mx:VBox top="5" left="5" width="100%" height="100%" backgroundColor="0xcc0000">
+				<mx:HBox>
+					<mx:PopUpButton id="lineTypeSettings" popUp="{settingsMenu}" label="Settings" mouseOver="dispatchMenuClick(event);" chromeColor="0xCCCCCC"  />
+					<mx:PopUpButton id="techIndicators" popUp="{techIndicatorsMenu}" label="Technical Indicators" mouseOver="dispatchMenuClick(event);" chromeColor="0xCCCCCC" />			
+					<mx:Button label="Compare" />
+				</mx:HBox>		
+				<local:chart width="100%" height="100%" id="chartMain" addedToStage="{chartMain.values = value }" />
+				<mx:HBox>
+					<s:ButtonBar id="duration" dataProvider="{arrDuration}" fontSize="9" selectedIndex="0" change="handleTabDurationIndexChange(event)"  >
+						<s:layout>
+							<s:HorizontalLayout gap="-1" columnWidth="35" variableColumnWidth="false" />
+						</s:layout>
+					</s:ButtonBar>
+					<s:ButtonBar id="zoom" dataProvider="{arrZoom}" fontSize="9" >
+						<s:layout>
+							<s:HorizontalLayout gap="-1" columnWidth="35" variableColumnWidth="false" />
+						</s:layout>
+					</s:ButtonBar>
+					<s:TextInput id="dateM" width="100" />
+				</mx:HBox>
+			</mx:VBox>
+		</flexmdi:MDIWindow>		
+	</flexmdi:MDIDockCanvas>
+	
+	
+</s:Application>

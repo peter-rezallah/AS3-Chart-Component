@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:HBox 
+	xmlns:mx="http://www.adobe.com/2006/mxml" 
+	width="100%" height="100%" updateComplete="handleUpdate()"
+	verticalGap="0" horizontalGap="0"
+	verticalScrollPolicy="off" horizontalScrollPolicy="off" 
+	verticalAlign="middle">
+	<mx:Script>
+		<![CDATA[
+			import mx.collections.ArrayCollection;
+			import mx.controls.List;
+			import mx.core.FlexGlobals;
+			import mx.events.FlexEvent;
+			import mx.utils.StringUtil;
+			
+			import sigma.Constants;
+			import sigma.autoComplete.utils.StringUtils;
+			
+			
+			[Bindable]
+			private var _list:List;
+			
+			private var _selectedItems:ArrayCollection;
+			private var _lang:String ;
+			
+			public function set selectedItems( value:ArrayCollection ):void
+			{
+				_selectedItems = value;
+			}
+			
+			public function set lang(val:String):void
+			{
+				_lang = val ;
+			}
+			
+			override public function set data( value:Object ):void
+			{
+				super.data = value;
+				
+				if (!value)
+				{
+					return;
+				}
+				
+				_list = owner as List;
+				
+				nameLabel.htmlText = _list.labelFunction( value );
+				switch(_lang)
+				{
+					case("en_US"):
+						reuLabel.text = value["name"];
+						break;
+					case("ar_EG"):
+						reuLabel.text = value["nameAr"];
+						break;
+					default:
+						reuLabel.text = value["name"];
+						break;
+					
+				}
+										
+				//colorBox.setStyle( "backgroundColor", value.hex );
+				
+				if (_selectedItems && _selectedItems.getItemIndex( value ) >= 0)
+				{
+					this.setStyle( "color", Constants.COLOR_TEXT_DISABLED );
+				}
+				else
+				{
+					this.clearStyle( "color" );
+				}
+			}
+			
+			override protected function resourcesChanged():void
+			{
+				super.resourcesChanged() ;
+				_lang = FlexGlobals.topLevelApplication.langCombo.selectedItem.localeChain.item.toString() ;
+				
+				
+			}
+			
+			private function handleUpdate():void
+			{
+				// There must be a better way to draw a line between each 
+				// of the items in the list
+				graphics.clear();
+				graphics.lineStyle( 1, 0x858585, 0.5 );
+				graphics.moveTo( -2, height + 2);
+				graphics.lineTo( width, height + 2 );
+			}
+			
+			
+			
+		]]>
+	</mx:Script>
+	
+	<mx:VBox width="80%" verticalGap="0">
+		<mx:Label id="nameLabel" fontSize="12"/>
+		<mx:HBox>
+			<mx:Label id="reuLabel" fontSize="10"/>
+		</mx:HBox>		
+	</mx:VBox>	
+	<!--<mx:Box id="colorBox" borderStyle="solid" width="50" height="25"/>-->
+	<mx:Spacer width="15"/>
+		
+</mx:HBox>

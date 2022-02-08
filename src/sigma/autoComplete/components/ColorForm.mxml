@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<components:CloseableTitleWindow
+	xmlns:mx="http://www.adobe.com/2006/mxml"
+	xmlns:components="sigma.autoComplete.components.*"
+	showCloseButton="true"
+	title="Add Color"
+	creationComplete="init()">
+	
+	<mx:Script>
+		<![CDATA[
+			import mx.managers.PopUpManager;
+						
+			public static const COLOR_ADDED:String = "colorAdded";
+			
+			private function init():void
+			{
+				textInput.setFocus();
+			}
+			
+			private function handleOkClick():void
+			{
+				if (!textInput.text)
+				{
+					return;
+				}
+				
+				var color:String = colorPicker.selectedColor.toString(16);
+				color = color.toUpperCase();
+				
+				while (color.length < 6)
+				{
+					 color = "0" + color;
+				}
+				
+				var colorEvent:ColorEvent = new ColorEvent( ColorEvent.NEW_COLOR );
+				colorEvent.name = textInput.text;
+				colorEvent.hex = "#" + color; 
+				dispatchEvent( colorEvent );
+				
+				PopUpManager.removePopUp( this ); 
+			}
+			
+		]]>
+	</mx:Script>
+	
+	<mx:Form defaultButton="{ okButton }">		
+		<mx:HBox>
+			<components:PromptTextInput id="textInput" prompt="Name for the Color" width="150"/>
+			<mx:ColorPicker id="colorPicker"/>
+			<mx:Button id="okButton" label="OK" width="{ Consts.BUTTON_WIDTH }" click="handleOkClick()"/>	
+		</mx:HBox>
+	</mx:Form>
+	
+</components:CloseableTitleWindow>
